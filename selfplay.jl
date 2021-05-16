@@ -13,6 +13,7 @@ function mcts(s, node)
         p, v = fθ(s)
         nmoves, a, p = validpolicy(s, p)
 
+        # a returns a chess
         node.cA, node.cP = a, p
         node.cN = node.cQ = zeros(nmoves)
         node.cNode = Vector{TreeNode}(missing, nmoves)
@@ -21,8 +22,8 @@ function mcts(s, node)
 
     else
         a = node.A[argmaxUCT(node.W, node.N, node.P)]
-        sp = !domove(s, a)
-        mcts(sp, node.children[a])
+        domove!(s, a)
+        mcts(s, node.children[a])
     end
 end
 
@@ -37,6 +38,9 @@ mutable struct TreeNode
     cNode::Vector{TreeNode}
 end
 
+node = TreeNode(true, nothing, nothing, nothing, nothing, nothing, nothing)
+b = startboard()
+mcts(b, node)
 
 function backpropagate(r, node)
     while node != NULL

@@ -2,25 +2,26 @@ using Pkg
 Pkg.add("Chess")
 using Chess
 
+
 # simple representation of board: just pieces plus current color
 # for a total of 13 planes
-function get_alphazero_input(board, rep)
-    color = sidetomove(board) == WHITE ? ones(rep, 8, 8) : zeros(rep, 8, 8)
+function get_alphazero_input(board, precision)
+    color = sidetomove(board) == WHITE ? ones(precision, 8, 8) : zeros(precision, 8, 8)
 
     input = cat(
         color,
-        toarray(pieces(board, PIECE_BP), rep),
-        toarray(pieces(board, PIECE_BN), rep),
-        toarray(pieces(board, PIECE_BB), rep),
-        toarray(pieces(board, PIECE_BR), rep),
-        toarray(pieces(board, PIECE_BQ), rep),
-        toarray(pieces(board, PIECE_BK), rep),
-        toarray(pieces(board, PIECE_WP), rep),
-        toarray(pieces(board, PIECE_WN), rep),
-        toarray(pieces(board, PIECE_WB), rep),
-        toarray(pieces(board, PIECE_WR), rep),
-        toarray(pieces(board, PIECE_WQ), rep),
-        toarray(pieces(board, PIECE_WK), rep),
+        toarray(pieces(board, PIECE_BP), precision),
+        toarray(pieces(board, PIECE_BN), precision),
+        toarray(pieces(board, PIECE_BB), precision),
+        toarray(pieces(board, PIECE_BR), precision),
+        toarray(pieces(board, PIECE_BQ), precision),
+        toarray(pieces(board, PIECE_BK), precision),
+        toarray(pieces(board, PIECE_WP), precision),
+        toarray(pieces(board, PIECE_WN), precision),
+        toarray(pieces(board, PIECE_WB), precision),
+        toarray(pieces(board, PIECE_WR), precision),
+        toarray(pieces(board, PIECE_WQ), precision),
+        toarray(pieces(board, PIECE_WK), precision),
         dims=3
     )
     return input
