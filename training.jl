@@ -25,7 +25,25 @@ function fθ()
             Residual(),
             Residual()
     )
-    return γ
+
+    p = Chain(
+            γ,
+            Conv((1, 1), 256 => 2, relu, stride=(1, 1)),
+            BatchNorm(2, relu),
+            flatten,
+            Dense(512, 8 * 8 * 88))
+    p = reshape(p, (8, 8, 88, :))
+
+
+    v = Chain(
+            γ,
+            Conv((1, 1), 256 => 1, relu, stride=(1, 1)),
+            BatchNorm(2, relu),
+            flatten,
+            Dense(256, 256, relu),
+            Dense(256, 1, tanh))
+
+    return p, v
 end
 
 
