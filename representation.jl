@@ -120,3 +120,7 @@ println(alphazero_rep(Move(SQ_H8, SQ_A1), encoder))
 println(alphazero_rep(Move(SQ_B2, SQ_A1), encoder))
 # test translation from alpha zero -> uci
 println(uci_rep(1, 3, 79, decoder))
+
+board = fromfen("R2R1rk1/5p1p/4nQpP/4p2q/3pP3/r1pP3P/2B2PP1/6K1 w - - 0 1")
+print(board)
+get_alphazero_input(board, Float16)

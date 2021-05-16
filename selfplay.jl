@@ -9,18 +9,19 @@ function mcts(s, node)
     elseif ischeckmate(s)
         backpropagate(-1, node) # prev player checkmated us
 
-    elseif node == missing
+    elseif node.isleaf
+        node.isleaf = false
         p, v = fθ(s)
-        nmoves, a, p = validpolicy(s, p)
+        nmoves, a = validpolicy(s)
 
         node.cA, node.cP = a, p
-        node.cN = node.cQ = zeros(nmoves)
-        node.cNode = Vector{TreeNode}(missing, nmoves)
+        node.cN = node.cW = zeros(nmoves)
+        node.cNode = Vector{TreeNode}(TreeNode, nmoves)
 
         backpropagate(v, node)
 
     else
-        a = node.A[argmaxUCT(node.W, node.N, node.P)]
+        a = node.cA[argmaxUCT(node.cW, node.cN, node.cP)]
         sp = !domove(s, a)
         mcts(sp, node.children[a])
     end
@@ -28,15 +29,16 @@ end
 
 
 mutable struct TreeNode
-    isleaf::Bool
-    parent::TreeNode
-    cW::Vector{Float16}
-    cN::Vector{Float16}
-    cA::Vector{Move}
-    cP::Vector{Float16}
-    cNode::Vector{TreeNode}
+    isleaf
+    parent
+    cW
+    cN
+    cA
+    cP
+    cNode
 end
 
+node = TreeNode(true, nothing, nothing, nothing, nothing, nothing, nothing)
 
 function backpropagate(r, node)
     while node != NULL
@@ -57,6 +59,10 @@ function argmaxUCT(W, N, P, c=2.0)
     return argmax(Q + U)
 end
 
+function fθ(s)
+    return rand(Float16, (8,8,88)), rand(Float16, (1))
+end
+
 
 function validpolicy(s, p)
     a = genmoves(s)
@@ -68,3 +74,7 @@ function validpolicy(s, p)
 
     return nmoves, a, vp
 end
+
+
+board = fromfen("R2R1rk1/5p1p/4nQpP/4p2q/3pP3/r1pP3P/2B2PP1/6K1 w - - 0 1")
+mcts(board, node)
