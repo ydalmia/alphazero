@@ -32,8 +32,8 @@ function alphazero_rep(move::Move, encoder::Dict)
     dest = to(move)
     src = from(move)
 
-    src_row = rank(src)
-    src_col = file(src)
+    src_row = rank(src).val
+    src_col = file(src).val
 
     delta = dest - src
     prmt = ispromotion(move) ? promotion(move) : EMPTY
@@ -106,18 +106,18 @@ end
 
 
 # to and from uci and alphazero
-encoder, decoder = alphazero_encoder_decoder()
+# encoder, decoder = alphazero_encoder_decoder()
 
-# test all values in decoder (and therefore encoder, in theory)
-for i in 1:88
-    decoder[i]
-end
-
-# test translation from uci -> alpha zero
-println(alphazero_rep(Move(SQ_A7, SQ_B8, KNIGHT), encoder))
-println(alphazero_rep(Move(SQ_A7, SQ_A8, QUEEN), encoder))
-println(alphazero_rep(Move(SQ_A4, SQ_C6), encoder))
-println(alphazero_rep(Move(SQ_H8, SQ_A1), encoder))
-println(alphazero_rep(Move(SQ_B2, SQ_A1), encoder))
-# test translation from alpha zero -> uci
-println(uci_rep(1, 3, 79, decoder))
+# # test all values in decoder (and therefore encoder, in theory)
+# for i in 1:88
+#     decoder[i]
+# end
+#
+# # test translation from uci -> alpha zero
+# println(alphazero_rep(Move(SQ_A7, SQ_B8, KNIGHT), encoder))
+# println(alphazero_rep(Move(SQ_A7, SQ_A8, QUEEN), encoder))
+# println(alphazero_rep(Move(SQ_A4, SQ_C6), encoder))
+# println(alphazero_rep(Move(SQ_H8, SQ_A1), encoder))
+# println(alphazero_rep(Move(SQ_B2, SQ_A1), encoder))
+# # test translation from alpha zero -> uci
+# println(uci_rep(1, 3, 79, decoder))
