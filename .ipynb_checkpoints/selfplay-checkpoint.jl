@@ -3,6 +3,7 @@
 
 using Chess         # General chess package, used throughout the project
 using BSON: @load, @save
+#using BenchmarkTools
 
 include("translation.jl") # translate AlphaZero <-> Universal Chess Interface
 include("montecarlo_tree.jl") # a tree structure for monte carlo searches
@@ -10,37 +11,44 @@ include("neuralnet.jl") # the brain that helps monte carlo focus its search
 
 function mcts(s::Board, node::TreeNode, fθ::Chain, encoder::Dict)
     if isdraw(s) # we drew, so no reward, but still need to update counts to show
-        backpropagate(0, node)
-
+        #backpropagate(0, node)
+        return 
+        
     elseif ischeckmate(s) # prev player checkmated us, negative reward
-        backpropagate(-1, node)
-
-    elseif node.isleaf
-        node.isleaf = false         # we have now explored it, no longer a leaf
-        p, v = fθ(alphazero_rep(s)) # ask neural net for policy and value
-        v = v[1]
+        #backpropagate(-1, node)
+        return 
         
-        nmoves, a, p = validpolicy(s, p, encoder) # extract legal moves
+    lock(node) do
+         if node.isleaf
+            node.isleaf = false # we have now explored it, no longer a leaf
+            p, v = fθ(alphazero_rep(s)) # ask neural net for policy and value
+            v = v[1]
 
-        node.cA, node.cP = a, p # store moves and policy
-        node.cN = node.cW = zeros(Float16, nmoves) # no statistics on children yet
+            nmoves, a, p = validpolicy(s, p, encoder) # extract legal moves
 
-        # bookkeeping children
-        node.children = [TreeNode() for _ in 1:nmoves]
-        bookkeep_children!(node, nmoves::Int)
+            node.cA, node.cP = a, p # store moves and policy
+            node.cN = node.cW = zeros(Float16, nmoves) # no statistics on children yet
+
+            node.children = [TreeNode() for _ in 1:nmoves] 
+            bookkeep_children!(node, nmoves::Int) # link children & parents
+            #backpropagate(v, node) # update parents with the reward
+            return 
+        end
+    end
         
-        # update parents with the reward
-        backpropagate(v, node)
-
     else
-        idx = argmaxUCT(node.cW, node.cN, node.cP) # greedily choose max UCT score
-        a = node.cA[idx]  # use the chosen action to transition to new state
-        domove!(s, a)  # (modify state in place to avoid allocation, returns undo info)
-
-        mcts(s, node.children[idx], fθ, encoder) # rollout (using neural net)
-
-        #undomove!(s, undo)
-
+        if @isdefined node
+            lock(node) do
+                idx = argmaxUCT(node.cW, node.cN, node.cP) # greedily choose max UCT score
+                a = node.cA[idx]  # use the chosen action to transition to new state
+                child = node.children[idx]
+            end
+            domove(!s, a)  # (modify state in place, can use undomove!(s, undo) if needed)
+            mcts(s, child, fθ, encoder) # rollout (using neural net)
+            return 
+        end
+        
+        
     end
 end
 
@@ -85,31 +93,25 @@ end
 
 function playgame(nsims)
     encoder, decoder = alphazero_encoder_decoder()
-    
+
     root = TreeNode()
     root.idx = 0
     
     m = fθ()
-    @time for _ in 1:nsims
+    Threads.@threads for _ in 1:nsims
         s = startboard()
         mcts(s, root, m, encoder)
     end
 end
 
 
-playgame(2000)
+playgame(100)
 
 
 # function save_model()
-#     @save "model-base.bson" m
-#     @save "model-policy.bson" p 
-#     @save "model-value.bson" v
+#     @save "model.bson" neuralnet
 # end
 
 # function load_model()
-#     @load "model-base.bson" model
-#     @load "model-policy.bson" policy
-#     @load "model-value.bson" value
-    
-#     return x -> fθ(x, model, policy, value)
+#     @load "model.bson" neuralnet
 # end

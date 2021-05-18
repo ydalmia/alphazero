@@ -5,28 +5,20 @@ using Chess
 
 # simple representation of board: just pieces plus current color
 # for a total of 13 planes
-function alphazero_rep(board::Board, precision=Float32)
-    color = sidetomove(board) == WHITE ? ones(precision, 8, 8) : zeros(precision, 8, 8)
-
-    input = cat(
-        color,
-        toarray(pieces(board, PIECE_BP), precision),
-        toarray(pieces(board, PIECE_BN), precision),
-        toarray(pieces(board, PIECE_BB), precision),
-        toarray(pieces(board, PIECE_BR), precision),
-        toarray(pieces(board, PIECE_BQ), precision),
-        toarray(pieces(board, PIECE_BK), precision),
-        toarray(pieces(board, PIECE_WP), precision),
-        toarray(pieces(board, PIECE_WN), precision),
-        toarray(pieces(board, PIECE_WB), precision),
-        toarray(pieces(board, PIECE_WR), precision),
-        toarray(pieces(board, PIECE_WQ), precision),
-        toarray(pieces(board, PIECE_WK), precision),
-        dims=3
-    )
+function alphazero_rep(board::Board)
+    board_rep = Array{Float32, 4}(undef, 8, 8, 13, 1)
     
-    input = reshape(input, (8, 8, 13, 1))
-    return input
+    board_pieces = [PIECE_BP, PIECE_BN, PIECE_BB, PIECE_BR, 
+                PIECE_BQ, PIECE_BK, PIECE_WP, PIECE_WN, 
+                PIECE_WB, PIECE_WR, PIECE_WQ, PIECE_WK]
+    
+    for (i, piece) in enumerate(board_pieces)
+        board_rep[:, :, i, 1] = toarray(pieces(board, piece))
+    end
+    
+    color = sidetomove(board) == WHITE ? ones(Float32, 8, 8) : zeros(Float32, 8, 8)
+    board_rep[:, :, 13, 1] = color
+    return board_rep
 end
 
 
@@ -44,13 +36,12 @@ function alphazero_rep(move::Move, encoder::Dict)
     return (src_row, src_col, plane)
 end
 
+
 function uci_rep(src_row::Int, src_col::Int, plane::Int, decoder::Dict)
-    # row 8 in matrix -> rank 1
-    # col 8 in matrix -> rank H
     sq = Square(SquareFile(src_col), SquareRank(src_row))
-
+    
     delta, prmt = decoder[plane]
-
+    
     if prmt == EMPTY
         return Move(sq, sq + delta)
     end
