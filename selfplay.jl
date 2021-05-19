@@ -1,127 +1,114 @@
-using Pkg
+# RUN SETTINGS: julia --threads 8 --optimize=3 --math-mode=fast --inline=yes --check-bounds=no alphazero/selfplay.jl
+# ^^ these are for maximum performance, but while debugging should not be used
+# ^^ still need to figure out optimal thread setting
 
-Pkg.add("Chess")    # Chess: https://romstad.github.io/Chess.jl/dev/manual/
-using Chess         # General chess package, used throughout the project
+# Further Ideas:
+# --------------
+# Make Model Deeper?
+#
+# Batch Image Classification Jobs?
+# Cache Fenstrings?
+# Classify Images w/ GPU? 
+# Try KNet instead of Flux? 
+# Change Model Input to Lower Dimension? i.e. original 79 instead of 88
+# Change for loop in simulation to while? because threading will not do full amount specified
 
+using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
+using Base.Threads
+using BSON: @load, @save # for serializing model
+using BenchmarkTools: @btime
 
-include("translation.jl")   # translate AlphaZero <-> Universal Chess Interface
+include("translation.jl") # translate AlphaZero <-> Universal Chess Interface
 include("montecarlo_tree.jl") # a tree structure for monte carlo searches
 include("neuralnet.jl") # the brain that helps monte carlo focus its search
 
 
-function mcts(s, node, encoder)
-    if isdraw(s) # we drew, so no reward, but still need to update counts to show
-        backpropagate(0, node)
+const VIRTUAL_LOSS = Float32(-1.0)
+const VIRTUAL_WIN = -VIRTUAL_LOSS
 
-    elseif ischeckmate(s) # prev player checkmated us, negative reward
-        backpropagate(-1, node)
+const encoder, _ = alphazero_encoder_decoder()
+const m = fθ()
 
-    elseif node.isleaf
-        # we have now explored it, no longer a leaf
-        node.isleaf = false
-        # ask neural network for recommended policy
-        # and the value of current state
-        p, v = fθ(s)
-        # extract the moves which are legal, and renormalize
-        nmoves, a, p = validpolicy(s, p, encoder)
-        p /= sum(p)
-        # store the actions we can take in a
-        # store the policy recommendation for each of those actions
-        node.cA, node.cP = a, p
-        # we have no statistics on how good any of those actions are
-        node.cN = node.cW = zeros(Float16, nmoves)
-        # we haven't explored the children yet!
+# NOTE: if you want to check how many simulations were actually performed
+# then return 1 or 0 from each branch.
+function mcts!(s::Board, node::TreeNode)    
+    if isdraw(s) # we drew => no reward, still need to update counts
+        backpropagate!(0.0, node)
+    
+    elseif ischeckmate(s) # prev player checkmated us, we lost
+        backpropagate!(-1.0, node)
 
-        node.children = [TreeNode() for _ in 1:nmoves]
-        for idx in 1:nmoves
-            node.children[idx].idx = idx
-            node.children[idx].parent = node
+    elseif atomic_xchg!(node.isleaf, false) # if leaf, mark not leaf, return true. 
+        r = nothing                         # if not leaf, mark not leaf, return false. 
+        with_lock(node) do 
+            r = expand!(node, s)
         end
-
-        # update parents with the reward
-        backpropagate(v, node)
-
-    else
-        # greedily choose action that maximizes the UCT score
-        # (the UCT balances exploration and exploitation)
-        idx = argmaxUCT(node.cW, node.cN, node.cP)
-        a = node.cA[idx]
-        # use the chosen action to transition to new state
-        # (modify state in place to avoid allocation)
-        # (domove! returns a move that undoes the move, but we don't need it)
-        domove!(s, a)
-
-        # expand the tree by searching further along this path
-        # since this was a promising path according to UCT score
-        mcts(s, node.children[idx], encoder)
-
-        #undomove!(s, undo)
-
+        backpropagate!(r, node)
+            
+    elseif node.children != nothing               # mandatory b/c thread may get bumped off
+        W, N, P = children_stats(node)            # by false in previous elseif, but, 
+        child = node.children[argmaxUCT(W, N, P)] # the thread executing expand! is not done
+        
+        atomic_add!(child.W, VIRTUAL_LOSS) # virtual loss
+        
+        domove!(s, child.A)
+        mcts!(s, child)
     end
 end
 
 
-function backpropagate(r, node)
-    while node.idx != 0
-        # update count and total reward
-        idx = node.idx
-        node.parent.cN[idx] += 1
-        node.parent.cW[idx] += -r # if we lost (r = -1), then our parent did well
+function expand!(node::TreeNode, s::Board)            
+    p, v = m(alphazero_rep(s)) # ask neural net for policy and value
 
-        # we flip reward value sign since at each level, the tree switches
-        # between white & black, and a white win means a black loss
-        # and vice versa
+    nmoves, a, vp = validpolicy(s, p, encoder) 
+    node.children = [TreeNode(a, vp, node) for (a, vp) in zip(a, vp)]
+    
+    return v[1] # heuristic r
+end
+
+
+
+function backpropagate!(r::Float32, node::TreeNode)
+    while node != nothing
+        atomic_add!(node.W, r + VIRTUAL_WIN) # reverse virtual loss, and add reward
+        atomic_add!(node.N, Float32(1.0))
         node = node.parent
         r = -r
     end
 end
 
 
-function argmaxUCT(W, N, P, c=2.0)
-    # alphazero's modified version of UCT, see the paper for more info
-    # but broadly, it balances between exploration and exploitation,
-    # but as time goes on, we favor exploitation instead of exploration
-    Q = W / N
-    U = c .* P / (1 .+ N) * √sum(N)
-    return argmax(Q + U)
+function argmaxUCT(W::Vector{Float32}, N::Vector{Float32}, P::Vector{Float32}, c=2.0)
+    Q = [N==0.0 ? 0.0 : W/N for (W, N) in zip(W, N)]
+    U = c * P ./ (1 .+ N) * √sum(N)
+    return argmax(Q .+ U)
 end
 
 
-function validpolicy(s, p, encoder)
-    # list of valid moves, according to chess rules
-    a = moves(s)
+function validpolicy(s::Board, p::Array, encoder::Dict)
+    a = moves(s) # list of valid moves, according to chess rules
+    p = reshape(p, (8, 8, 88)) # neural net spits p out as a 1-d vector
     nmoves = length(a)
 
-    # extract the policy values for only the valid actions
-    # by converting uci moves to alphazero plane moves
-    # and then reading the value from the planes
-    vp = Vector{Float16}(undef, nmoves)
+    vp = Vector{Float32}(undef, nmoves)
     for i in 1:nmoves
-        row, col, plane = alphazero_rep(a[i], encoder)
-        vp[i] = p[row, col, plane]
+        row, col, plane = alphazero_rep(a[i], encoder) # translate uci to az encoding 
+        vp[i] = p[row, col, plane] # extract the policy values from nnet output 
     end
-
+    
+    vp = vp ./ sum(vp) # normalize the valid policy
     return nmoves, a, vp
 end
 
 
-
-
-
-function playgame()
-    encoder, decoder = alphazero_encoder_decoder()
-
+# Note: add an atomic counter to actually run the expected nsims
+# (or, we could change the mcts code to wait for unlock?)
+function playgame(nsims::Int)
     root = TreeNode()
-    root.idx = 0
-
-    for _ in 1:100
+    @threads for _ in 1:nsims
         s = startboard()
-        mcts(s, root, encoder)
+        mcts!(s, root)
     end
-
-    # print_tree(root, maxdepth=20)
 end
 
-
-
-playgame()
+@btime playgame(5000)
