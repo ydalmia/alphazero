@@ -20,7 +20,7 @@ function Residual()
 end
 
 f = Chain(
-        Conv((3, 3), 13 => 256, relu, pad=(1, 1), stride=(1, 1)),
+        Conv((3, 3), 12 => 256, relu, pad=(1, 1), stride=(1, 1)),
         BatchNorm(256, relu),
         Conv((3, 3), 256 => 256, relu, pad=(1, 1), stride=(1, 1)),
         BatchNorm(256),

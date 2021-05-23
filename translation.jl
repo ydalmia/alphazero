@@ -2,22 +2,22 @@
 # Pkg.add("Chess")
 using Chess
 
-
 # simple representation of board: just pieces plus current color
 # for a total of 13 planes
 function alphazero_rep(board::Board)
-    board_rep = Array{Float32, 4}(undef, 8, 8, 13, 1)
+    board_rep = Array{Float32, 4}(undef, 8, 8, 12, 1)
+
+    board_pieces =  [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR,
+                     PIECE_WQ, PIECE_WK, PIECE_BP, PIECE_BN,
+                     PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
     
-    board_pieces = [PIECE_BP, PIECE_BN, PIECE_BB, PIECE_BR, 
-                PIECE_BQ, PIECE_BK, PIECE_WP, PIECE_WN, 
-                PIECE_WB, PIECE_WR, PIECE_WQ, PIECE_WK]
     
     for (i, piece) in enumerate(board_pieces)
         board_rep[:, :, i, 1] = toarray(pieces(board, piece))
     end
     
-    color = sidetomove(board) == WHITE ? ones(Float32, 8, 8) : zeros(Float32, 8, 8)
-    board_rep[:, :, 13, 1] = color
+    # color = sidetomove(board) == WHITE ? ones(Float32, 8, 8) : zeros(Float32, 8, 8)
+    # board_rep[:, :, 13, 1] = color
     return board_rep
 end
 
@@ -30,7 +30,15 @@ function alphazero_rep(move::Move, encoder::Dict)
     src_col = file(src).val
 
     delta = dest - src
-    prmt = ispromotion(move) ? promotion(move) : EMPTY
+    prmt = EMPTY
+
+    if ispromotion(move)
+        prmt = promotion(move)
+        if prmt == QUEEN
+            prmt = EMPTY
+        end 
+    end
+    
     plane = encoder[delta, prmt]
 
     return (src_row, src_col, plane)
@@ -41,7 +49,9 @@ function uci_rep(src_row::Int, src_col::Int, plane::Int, decoder::Dict)
     sq = Square(SquareFile(src_col), SquareRank(src_row))
     
     delta, prmt = decoder[plane]
-    
+
+    # src_row and src_col are the second to top rank
+    # and the piece type is a pawn, then return a move with prmt = QUEEN
     if prmt == EMPTY
         return Move(sq, sq + delta)
     end
@@ -85,8 +95,8 @@ function alphazero_encoder_decoder()
         end
     end
 
-    # promotion moves (24)
-    for delta in [DELTA_N, DELTA_NE, DELTA_NW, DELTA_S, DELTA_SE, DELTA_SW]
+    # promotion moves (12)
+    for delta in [DELTA_N, DELTA_NE, DELTA_NW]
         for piece in [KNIGHT, BISHOP, ROOK, QUEEN]
             encoder[(delta, piece)] = i
             decoder[i] = (delta, piece)
@@ -107,10 +117,3 @@ end
 # end
 #
 # # test translation from uci -> alpha zero
-# println(alphazero_rep(Move(SQ_A7, SQ_B8, KNIGHT), encoder))
-# println(alphazero_rep(Move(SQ_A7, SQ_A8, QUEEN), encoder))
-# println(alphazero_rep(Move(SQ_A4, SQ_C6), encoder))
-# println(alphazero_rep(Move(SQ_H8, SQ_A1), encoder))
-# println(alphazero_rep(Move(SQ_B2, SQ_A1), encoder))
-# # test translation from alpha zero -> uci
-# println(uci_rep(1, 3, 79, decoder))
