@@ -1,4 +1,4 @@
-# RUN SETTINGS: julia --threads 8 
+# RUN SETTINGS: julia --threads 8
 # may also want: --optimize=3 --math-mode=fast --inline=yes --check-bounds=no
 
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
@@ -21,12 +21,12 @@ const encoder, _ = alphazero_encoder_decoder()
 
 # NOTE: if you want to check how many simulations were actually performed
 # then return 1 or 0 from each branch.
-function mcts(s::Board, node::TreeNode)    
+function mcts(s::Board, node::TreeNode)
     if isdraw(s) # we drew => no reward, still need to update counts
         backpropagate!(0.0, node)
     elseif ischeckmate(s) # prev player checkmated us, we lost
         backpropagate!(-1.0, node)
-    elseif atomic_cas!(node.isleaf, true, false) # if leaf, mark not leaf, return old isleaf val.  
+    elseif atomic_cas!(node.isleaf, true, false) # if leaf, mark not leaf, return old isleaf val.
         r = expand!(node, s)
         atomic_xchg!(node.isready, true)
         backpropagate!(r, node)
@@ -34,10 +34,10 @@ function mcts(s::Board, node::TreeNode)
         while atomic_cas!(node.isready, false, false) == false # spin until ready
             sleep(0.1)
         end
-        W, N, P = children_stats(node)            # by false in previous elseif, but, 
+        W, N, P = children_stats(node)            # by false in previous elseif, but,
         child = node.children[argmaxUCT(W, N, P)] # the thread executing expand! is not done
         atomic_add!(child.W, VIRTUAL_LOSS) # virtual loss
-        
+
         sp = domove(s, child.A)
         sp = flip(sp)
         mcts(sp, child)
@@ -45,18 +45,18 @@ function mcts(s::Board, node::TreeNode)
 end
 
 
-function expand!(node::TreeNode, s::Board)      
+function expand!(node::TreeNode, s::Board)
     base = f(alphazero_rep(s) |> gpu) # ask neural net for policy and value
     p = Array(policy(base))
     v = Array(value(base))
-    a, vp = validpolicy(s, p, encoder) 
+    a, vp = validpolicy(s, p, encoder)
 
     a = map(a) do x
         if !ispromotion(x) && ptype(pieceon(s, from(x))) == PAWN && rank(from(x)) == SS_RANK_7 #actually a queen promotion
             x = Move(from(x), to(x), QUEEN)
         end
     end
-    
+
     # if the action recommended is to promote a pawn, then convert it to a QUEEN# unless it recommends something else
     node.children = [TreeNode(a, vp, node) for (a, vp) in zip(a, vp)]
     return v[1, 1] # heuristic r
@@ -83,15 +83,20 @@ end
 
 function validpolicy(s::Board, p::Array, encoder::Dict)
     a = moves(s) # list of valid moves, according to chess rules
+
+    if sidetomove(s) == BLACK
+        a = map(rotate, a)
+    end
+
     p = reshape(p, (8, 8, 88)) # neural net spits p out as a 1-d vector
     nmoves = length(a)
 
     vp = Vector{Float32}(undef, nmoves)
     for i in 1:nmoves
-        row, col, plane = alphazero_rep(a[i], encoder) # translate uci to az encoding 
-        vp[i] = p[row, col, plane] # extract the policy values from nnet output 
+        row, col, plane = alphazero_rep(a[i], encoder, sidetomove) # translate uci to az encoding
+        vp[i] = p[row, col, plane] # extract the policy values from nnet output
     end
-    
+
     vp = vp ./ sum(vp) # normalize the valid policy
     return a, vp
 end
@@ -99,7 +104,7 @@ end
 
 function simulate(root, s, nsims)
     @threads for _ in 1:nsims
-        mcts(s, root)    
+        mcts(s, root)
         pprint(s, color=true, unicode=true)
     end
 end
@@ -117,7 +122,7 @@ function playgame(s=startboard())
             z = -1
             break
         end
-        
+
         # simulate what moves are best
         simulate(tree, s, 800)
 
@@ -126,24 +131,23 @@ function playgame(s=startboard())
         idx = 1:length(N)
         weights = N / sum(N) # =[0.1, 0.1, 0.2, 0.2, 0.1, 0.3]
         idx = sample(idx, ProbabilityWeights(weights))
-    
-        # prune the tree (tree = tree's selected child) 
+
+        # prune the tree (tree = tree's selected child)
         tree = tree.children[idx]
         tree.parent = nothing
-        
+
         append!(history, [s, weights])
 
         # make move flip board
         s = domove(s)
-        s = flip(s)
-        
+
     end
-    
+
     for i in length(history):1:-1
         append!(history[i], z)
         z = -z
     end
-    
+
     return history
 end
 

@@ -1,26 +1,52 @@
-# using Pkg
-# Pkg.add("Chess")
 using Chess
 
-# simple representation of board: just pieces plus current color
-# for a total of 13 planes
-function alphazero_rep(board::Board)
-    board_rep = Array{Float32, 4}(undef, 8, 8, 12, 1)
+function alphazero_rotate(old_move::Move)
+    new_src = Square(65 - from(old_move).val)
+    new_dest = Square(65 - to(old_move).val)
 
-    board_pieces =  [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR,
-                     PIECE_WQ, PIECE_WK, PIECE_BP, PIECE_BN,
-                     PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
-    
-    
-    for (i, piece) in enumerate(board_pieces)
-        board_rep[:, :, i, 1] = toarray(pieces(board, piece))
+    if ispromotion(old_move)
+        return Move(new_src, new_dest, promotion(old_move))
+    else
+        return Move(new_src, new_dest)
     end
-    
-    # color = sidetomove(board) == WHITE ? ones(Float32, 8, 8) : zeros(Float32, 8, 8)
-    # board_rep[:, :, 13, 1] = color
-    return board_rep
 end
 
+function alphazero_rep(board::Board)
+    board_rep = Array{Float32}(undef, 8, 8, 18)
+
+    board_pieces = [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR,
+                    PIECE_WQ, PIECE_WK, PIECE_BP, PIECE_BN,
+                    PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
+
+    BLACK_KING_CASTLE = cancastlekingside(board, BLACK)
+    WHITE_KING_CASTLE = cancastlekingside(board, WHITE)
+
+    BLACK_QUEEN_CASTLE = cancastlequeenside(board, BLACK)
+    WHITE_QUEEN_CASTLE = cancastlequeenside(board, WHITE)
+
+    CURR_COLOR = sidetomove(board)
+
+    perspectiveCorrectedBoard = (CURR_COLOR == BLACK) ? rotate(board) : board
+
+    CURRENT_PERSPECTIVE_KING_CASTLE = (CURR_COLOR == BLACK) ? BLACK_KING_CASTLE : WHITE_KING_CASTLE
+    CURRENT_PERSPECTIVE_QUEEN_CASTLE = (CURR_COLOR == BLACK) ? BLACK_QUEEN_CASTLE : WHITE_QUEEN_CASTLE
+
+    OPPOSITE_PERSPECTIVE_KING_CASTLE = (CURR_COLOR == BLACK) ? WHITE_KING_CASTLE : BLACK_KING_CASTLE
+    OPPOSITE_PERSPECTIVE_QUEEN_CASTLE = (CURR_COLOR == BLACK) ? WHITE_QUEEN_CASTLE : BLACK_QUEEN_CASTLE
+
+    for (i, piece) in enumerate(board_pieces)
+        board_rep[:, :, i] = toarray(pieces(perspectiveCorrectedBoard, piece))
+    end
+
+    board_rep[:, :, 13] .= (CURR_COLOR == WHITE)
+    board_rep[:, :, 14] .= CURRENT_PERSPECTIVE_KING_CASTLE
+    board_rep[:, :, 15] .= CURRENT_PERSPECTIVE_QUEEN_CASTLE
+    board_rep[:, :, 16] .= OPPOSITE_PERSPECTIVE_KING_CASTLE
+    board_rep[:, :, 17] .= OPPOSITE_PERSPECTIVE_QUEEN_CASTLE
+    board_rep[:, :, 18] .= board.r50
+
+    return board_rep
+end
 
 function alphazero_rep(move::Move, encoder::Dict)
     dest = to(move)
@@ -36,29 +62,25 @@ function alphazero_rep(move::Move, encoder::Dict)
         prmt = promotion(move)
         if prmt == QUEEN
             prmt = EMPTY
-        end 
+        end
     end
-    
+
     plane = encoder[delta, prmt]
 
     return (src_row, src_col, plane)
 end
 
-
 function uci_rep(src_row::Int, src_col::Int, plane::Int, decoder::Dict)
     sq = Square(SquareFile(src_col), SquareRank(src_row))
-    
+
     delta, prmt = decoder[plane]
 
-    # src_row and src_col are the second to top rank
-    # and the piece type is a pawn, then return a move with prmt = QUEEN
     if prmt == EMPTY
         return Move(sq, sq + delta)
     end
 
     return Move(sq, sq + delta, prmt)
 end
-
 
 function alphazero_encoder_decoder()
     encoder = Dict()
@@ -106,14 +128,3 @@ function alphazero_encoder_decoder()
 
     return encoder, decoder
 end
-
-
-# to and from uci and alphazero
-# encoder, decoder = alphazero_encoder_decoder()
-
-# # test all values in decoder (and therefore encoder, in theory)
-# for i in 1:88
-#     decoder[i]
-# end
-#
-# # test translation from uci -> alpha zero
