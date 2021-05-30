@@ -77,5 +77,5 @@ function AbstractTrees.children(node::TreeNode)
 end
     
 AbstractTrees.printnode(io::IO, node::TreeNode) = (
-    print(io, "N: ", node.N)
+    print(io, node.A, "N: ", node.N)
 )

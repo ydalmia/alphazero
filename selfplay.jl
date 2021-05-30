@@ -21,9 +21,9 @@ const encoder, _ = alphazero_encoder_decoder()
 # then return 1 or 0 from each branch.
 function mcts(s::Board, node::TreeNode)
     if isdraw(s) # we drew => no reward, still need to update counts
-        backpropagate!(0.0, node)
+        backpropagate!(Float32(0.0), node)
     elseif ischeckmate(s) # prev player checkmated us, we lost
-        backpropagate!(-1.0, node)
+        backpropagate!(Float32(-1.0), node)
     elseif atomic_cas!(node.isleaf, true, false) # if leaf, mark not leaf, return old isleaf val.
         r = expand!(node, s)
         atomic_xchg!(node.isready, true)
@@ -109,6 +109,8 @@ function playgame(s=startboard())
 
     # Break when game is over
     while(true)
+        pprint(s, unicode=true, color=true)
+        print_tree(tree)
         if isdraw(s)
             z = 0
             break
@@ -133,7 +135,7 @@ function playgame(s=startboard())
         append!(history, [s, weights])
 
         # make move flip board
-        s = domove(s)
+        s = domove(s, tree.A)
         s = flip(flop(s))
 
     end
