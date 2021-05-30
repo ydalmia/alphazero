@@ -2,7 +2,6 @@
 # may also want: --optimize=3 --math-mode=fast --inline=yes --check-bounds=no
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
 using Base.Threads
-using CUDA
 using Flux
 using StatsBase
 
@@ -38,21 +37,23 @@ function mcts(s::Board, node::TreeNode)
         atomic_add!(child.W, VIRTUAL_LOSS) # virtual loss
 
         sp = domove(s, child.A)
-        sp = flip(flop((sp))
+        sp = flip(flop(sp))
         mcts(sp, child)
     end
 end
 
 
 function expand!(node::TreeNode, s::Board)
-    base = f(alphazero_rep(s) |> gpu) # ask neural net for policy and value
+    base = f(alphazero_rep(s)) # ask neural net for policy and value
     p = Array(policy(base))
     v = Array(value(base))
     a, vp = validpolicy(s, p, encoder)
 
     a = map(a) do x
         if !ispromotion(x) && ptype(pieceon(s, from(x))) == PAWN && rank(from(x)) == SS_RANK_7 #actually a queen promotion
-            x = Move(from(x), to(x), QUEEN)
+            return Move(from(x), to(x), QUEEN)
+        else
+            return x
         end
     end
 
@@ -87,7 +88,7 @@ function validpolicy(s::Board, p::Array, encoder::Dict)
 
     vp = Vector{Float32}(undef, nmoves)
     for i in 1:nmoves
-        row, col, plane = alphazero_rep(a[i], encoder, sidetomove) # translate uci to az encoding
+        row, col, plane = alphazero_rep(a[i], encoder) # translate uci to az encoding
         vp[i] = p[row, col, plane] # extract the policy values from nnet output
     end
 
@@ -117,7 +118,7 @@ function playgame(s=startboard())
         end
 
         # simulate what moves are best
-        simulate(tree, s, 800)
+        simulate(tree, s, 20)
 
         # choose move from weighted probability distribution
         _, N, _ = children_stats(tree)
@@ -144,6 +145,8 @@ function playgame(s=startboard())
 
     return history
 end
+
+playgame(fromfen("R2R1rk1/5p1p/4nQpP/4p2q/3pP3/r1pP3P/2B2PP1/6K1 w - - 0 1"))
 
 # function train(ntrain::Int)
 #     examples = []

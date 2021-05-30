@@ -54,16 +54,16 @@ function children_stats(node::TreeNode)
     W = Array{Float32}(undef, n)
     N = Array{Float32}(undef, n)
     P = Array{Float32}(undef, n)
-    A = Move
+    A = []
 
     # see https://docs.julialang.org/en/v1/base/multi-threading/#Base.Threads.atomic_cas!
     for (i, child) in enumerate(node.children)
         W[i] = atomic_cas!(child.W, Float32(0.0), Float32(0.0)) # returns child.W without getting corrupted
         N[i] = atomic_cas!(child.N, Float32(0.0), Float32(0.0)) # ... N
         P[i] = child.P
-        A[i] = child.A
+        push!(A, child.A)
     end
-    return W, N, P, A
+    return W, N, P
 end
 
 

@@ -12,7 +12,6 @@
 
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
 using Base.Threads
-using CUDA
 using Flux
 #using BSON: @load, @save # for serializing model
 
@@ -52,7 +51,7 @@ end
 
 
 function expand!(node::TreeNode, s::Board)      
-    base = f(alphazero_rep(s) |> gpu) # ask neural net for policy and value
+    base = f(alphazero_rep(s)) # ask neural net for policy and value
     p = Array(policy(base))
     v = Array(value(base))
     nmoves, a, vp = validpolicy(s, p, encoder) 

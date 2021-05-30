@@ -1,14 +1,14 @@
 using Chess
 
 function alphazero_rep(board::Board)
-    board_rep = Array{Float32}(undef, 8, 8, 12)
+    board_rep = Array{Float32}(undef, 8, 8, 12, 1)
 
     board_pieces = [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR,
                     PIECE_WQ, PIECE_WK, PIECE_BP, PIECE_BN,
                     PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
 
     for (i, piece) in enumerate(board_pieces)
-        board_rep[:, :, i] = toarray(pieces(perspectiveCorrectedBoard, piece))
+        board_rep[:, :, i, 1] = toarray(pieces(board, piece))
     end
 
     return board_rep
