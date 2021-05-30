@@ -1,6 +1,5 @@
 # RUN SETTINGS: julia --threads 8
 # may also want: --optimize=3 --math-mode=fast --inline=yes --check-bounds=no
-
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
 using Base.Threads
 using CUDA
@@ -39,7 +38,7 @@ function mcts(s::Board, node::TreeNode)
         atomic_add!(child.W, VIRTUAL_LOSS) # virtual loss
 
         sp = domove(s, child.A)
-        sp = flip(sp)
+        sp = flip(flop((sp))
         mcts(sp, child)
     end
 end
@@ -63,7 +62,6 @@ function expand!(node::TreeNode, s::Board)
 end
 
 
-
 function backpropagate!(r::Float32, node::TreeNode)
     while node != nothing
         atomic_add!(node.W, r + VIRTUAL_WIN) # reverse virtual loss, and add reward
@@ -84,10 +82,6 @@ end
 function validpolicy(s::Board, p::Array, encoder::Dict)
     a = moves(s) # list of valid moves, according to chess rules
 
-    if sidetomove(s) == BLACK
-        a = map(rotate, a)
-    end
-
     p = reshape(p, (8, 8, 88)) # neural net spits p out as a 1-d vector
     nmoves = length(a)
 
@@ -105,7 +99,6 @@ end
 function simulate(root, s, nsims)
     @threads for _ in 1:nsims
         mcts(s, root)
-        pprint(s, color=true, unicode=true)
     end
 end
 
@@ -140,6 +133,7 @@ function playgame(s=startboard())
 
         # make move flip board
         s = domove(s)
+        s = flip(flop(s))
 
     end
 

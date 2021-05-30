@@ -1,49 +1,15 @@
 using Chess
 
-function alphazero_rotate(old_move::Move)
-    new_src = Square(65 - from(old_move).val)
-    new_dest = Square(65 - to(old_move).val)
-
-    if ispromotion(old_move)
-        return Move(new_src, new_dest, promotion(old_move))
-    else
-        return Move(new_src, new_dest)
-    end
-end
-
 function alphazero_rep(board::Board)
-    board_rep = Array{Float32}(undef, 8, 8, 18)
+    board_rep = Array{Float32}(undef, 8, 8, 12)
 
     board_pieces = [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR,
                     PIECE_WQ, PIECE_WK, PIECE_BP, PIECE_BN,
                     PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
 
-    BLACK_KING_CASTLE = cancastlekingside(board, BLACK)
-    WHITE_KING_CASTLE = cancastlekingside(board, WHITE)
-
-    BLACK_QUEEN_CASTLE = cancastlequeenside(board, BLACK)
-    WHITE_QUEEN_CASTLE = cancastlequeenside(board, WHITE)
-
-    CURR_COLOR = sidetomove(board)
-
-    perspectiveCorrectedBoard = (CURR_COLOR == BLACK) ? rotate(board) : board
-
-    CURRENT_PERSPECTIVE_KING_CASTLE = (CURR_COLOR == BLACK) ? BLACK_KING_CASTLE : WHITE_KING_CASTLE
-    CURRENT_PERSPECTIVE_QUEEN_CASTLE = (CURR_COLOR == BLACK) ? BLACK_QUEEN_CASTLE : WHITE_QUEEN_CASTLE
-
-    OPPOSITE_PERSPECTIVE_KING_CASTLE = (CURR_COLOR == BLACK) ? WHITE_KING_CASTLE : BLACK_KING_CASTLE
-    OPPOSITE_PERSPECTIVE_QUEEN_CASTLE = (CURR_COLOR == BLACK) ? WHITE_QUEEN_CASTLE : BLACK_QUEEN_CASTLE
-
     for (i, piece) in enumerate(board_pieces)
         board_rep[:, :, i] = toarray(pieces(perspectiveCorrectedBoard, piece))
     end
-
-    board_rep[:, :, 13] .= (CURR_COLOR == WHITE)
-    board_rep[:, :, 14] .= CURRENT_PERSPECTIVE_KING_CASTLE
-    board_rep[:, :, 15] .= CURRENT_PERSPECTIVE_QUEEN_CASTLE
-    board_rep[:, :, 16] .= OPPOSITE_PERSPECTIVE_KING_CASTLE
-    board_rep[:, :, 17] .= OPPOSITE_PERSPECTIVE_QUEEN_CASTLE
-    board_rep[:, :, 18] .= board.r50
 
     return board_rep
 end
