@@ -1,13 +1,5 @@
 using Flux
 
-# function save_model(fθ)
-#     @save "model.bson" fθ
-# end
-
-# function load_model()
-#     return @load "model.bson"
-# end
-
 function Residual()
     SkipConnection(
         Chain(Conv((3, 3), 256 => 256, relu, pad=(1, 1), stride=(1, 1)),
@@ -19,32 +11,30 @@ function Residual()
 end
 
 f = Chain(
-        Conv((3, 3), 12 => 256, relu, pad=(1, 1), stride=(1, 1)),
-        BatchNorm(256, relu),
-        Conv((3, 3), 256 => 256, relu, pad=(1, 1), stride=(1, 1)),
-        BatchNorm(256),
-        Residual(),
-        Residual(),
-        Residual(),
-        Residual(),
-        Residual(), 
-        Residual(),
-        Residual()
-    )
+    Conv((3, 3), 12 => 256, relu, pad=(1, 1), stride=(1, 1)),
+    BatchNorm(256, relu),
+    Conv((3, 3), 256 => 256, relu, pad=(1, 1), stride=(1, 1)),
+    BatchNorm(256),
+    Residual(),
+    Residual(),
+    Residual(),
+    Residual(), 
+    Residual(),
+    Residual()
+)
 
 policy = Chain(
-        Conv((1, 1), 256 => 2, relu, stride=(1, 1)),
-        BatchNorm(2, relu),
-        flatten,
-        Dense(8*8*2, 8*8*88)
+    Conv((1, 1), 256 => 2, relu, stride=(1, 1)),
+    BatchNorm(2, relu),
+    flatten,
+    Dense(8*8*2, 8*8*88, sigmoid)
 )
 
 
 value = Chain(
-        Conv((1, 1), 256 => 1, relu, stride=(1, 1)),
-        BatchNorm(1, relu),
-        flatten,
-        Dense(8*8*1, 256, relu),
-        Dense(256, 1),
-        x -> tanh.(x)
+    Conv((1, 1), 256 => 1, relu, stride=(1, 1)),
+    BatchNorm(1, relu),
+    flatten,
+    Dense(8*8*1, 256, relu),
+    Dense(256, 1, tanh) 
 )
