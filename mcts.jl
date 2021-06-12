@@ -1,4 +1,3 @@
-# using Base: Unicode
 # RUN SETTINGS: julia --threads 8
 # may also want: --optimize=3 --math-mode=fast --inline=yes --check-bounds=no
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
@@ -10,6 +9,12 @@ include("montecarlo_tree.jl") # a tree structure for storing monte carlo searc r
 include("neuralnet.jl") # the brain that helps monte carlo focus its search
 
 const encoder, _ = alphazero_encoder_decoder()
+
+function simulate(root, s, nsims)
+    for _ in 1:nsims
+        mcts(deepcopy(s), root)
+    end
+end
 
 function mcts(s::Board, node::TreeNode)
     if isdraw(s)
@@ -43,7 +48,6 @@ function expand!(node::TreeNode, s::Board)
         end
     end
 
-    # if the action recommended is to promote a pawn, then convert it to a QUEEN# unless it recommends something else
     node.children = [TreeNode(a, vp, node) for (a, vp) in zip(a, vp)]
     return v[1, 1] # heuristic r
 end
@@ -78,10 +82,4 @@ function validpolicy(s::Board, p::Array, encoder::Dict)
 
     vp = vp ./ sum(vp) # normalize the valid policy
     return a, vp
-end
-
-function simulate(root, s, nsims)
-    for _ in 1:nsims
-        mcts(deepcopy(s), root)
-    end
 end

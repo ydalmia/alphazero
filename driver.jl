@@ -2,10 +2,10 @@ using Distributed
 
 addprocs(4)
 
-@everywhere include("selfplay.jl")
+@everywhere include("mcts.jl")
 
-function parallel_playgame(s; nsims=800)
-    @distributed for _ in 1:12
+function selfplay(s; ngames=16; nsims=800)
+    @distributed for _ in 1:ngames
         root = TreeNode()
         simulate(root, s, nsims)
         println("done")
