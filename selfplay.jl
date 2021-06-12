@@ -17,36 +17,34 @@ include("neuralnet.jl") # the brain that helps monte carlo focus its search
 # when using multiple threads simultaneously, they will all explore the same 
 # branch because of argmax. to force the different threads to explore 
 # different branches, we add a temporary loss to the current node 
-const TEMPORARY_LOSS = Float32(-1.0) 
 const TEMPORARY_WIN = Float32(1.0)
+const TEMPORARY_LOSS = -TEMPORARY_WIN
 
 const encoder, _ = alphazero_encoder_decoder()
 
-
 function mcts(s::Board, node::TreeNode)
     atomic_add!(node.W, TEMPORARY_LOSS)
-    if isdraw(s) # we drew => no reward, still need to update counts
-        atomic_xchg!(node.isleaf, false)
+    if isdraw(s)
+        atomic_xchg!(node.isleaf, false) # mark not leaf
         backpropagate!(Float32(0.0), node)
-    elseif ischeckmate(s) # prev player checkmated us, we lost
-        atomic_xchg!(node.isleaf, false)
+    elseif ischeckmate(s)
+        atomic_xchg!(node.isleaf, false) # mark not leaf
         backpropagate!(Float32(1.0), node)
     elseif atomic_cas!(node.isleaf, true, false) # if leaf, mark not leaf, return old isleaf val.
-        # r = expand!(node, s)
+        r = expand!(node, s)
         atomic_xchg!(node.isready, true)
         backpropagate!(r, node)
     else
         while atomic_cas!(node.isready, false, false) == false # spin until ready
-            sleep(0.1)
+            sleep(0.1) # TODO: Change this to use a condition variable
         end
-        W, N, P = children_stats(node)            # by false in previous elseif, but,
-        child = node.children[argmaxUCT(W, N, P)] # the thread executing expand! is not done
+        W, N, P = children_stats(node)            
+        child = node.children[argmaxUCT(W, N, P)]
         sp = domove(s, child.A)
         sp = flip(flop(sp))
         mcts(sp, child)
     end
 end
-
 
 function expand!(node::TreeNode, s::Board)
     base = f(alphazero_rep(s)) # ask neural net for policy and value
@@ -67,7 +65,6 @@ function expand!(node::TreeNode, s::Board)
     node.children = [TreeNode(a, vp, node) for (a, vp) in zip(a, vp)]
     return v[1, 1] # heuristic r
 end
-
 
 function backpropagate!(r::Float32, node::TreeNode)
     while node !== nothing
@@ -114,4 +111,4 @@ function playgame(s; nsims=800)
 end
 
 playgame(fromfen("7k/4KRpp/4PP2/8/8/8/8/8 w - - 0 1"))
-playgame(fromfen("R2R1rk1/5p1p/4nQpP/4p2q/3pP3/r1pP3P/2B2PP1/6K1 w - - 0 1"), nsims=1600)
+playgame(fromfen("R2R1rk1/5p1p/4nQpP/4p2q/3pP3/r1pP3P/2B2PP1/6K1 w - - 0 1"))
