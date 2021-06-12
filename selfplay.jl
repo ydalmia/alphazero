@@ -1,3 +1,4 @@
+using Base: Unicode
 # RUN SETTINGS: julia --threads 8
 # may also want: --optimize=3 --math-mode=fast --inline=yes --check-bounds=no
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
@@ -11,7 +12,10 @@ include("translation.jl") # translate AlphaZero <-> Universal Chess Interface
 include("montecarlo_tree.jl") # a tree structure for monte carlo searches
 include("neuralnet.jl") # the brain that helps monte carlo focus its search
 
-const VIRTUAL_LOSS = Float32(-1.0)
+# const VIRTUAL_LOSS = Float32(-1.0)
+# const VIRTUAL_WIN = -VIRTUAL_LOSS
+
+const VIRTUAL_LOSS = Float32(0.0)
 const VIRTUAL_WIN = -VIRTUAL_LOSS
 
 const encoder, _ = alphazero_encoder_decoder()
@@ -22,9 +26,12 @@ const encoder, _ = alphazero_encoder_decoder()
 function mcts(s::Board, node::TreeNode)
     if isdraw(s) # we drew => no reward, still need to update counts
         backpropagate!(Float32(0.0), node)
+        println("THE GAME WAS A DRAW")
     elseif ischeckmate(s) # prev player checkmated us, we lost
-        backpropagate!(Float32(-1.0), node)
+        backpropagate!(Float32(1.0), node)
+        println("THE GAME WAS A CHECKMATE")
     elseif atomic_cas!(node.isleaf, true, false) # if leaf, mark not leaf, return old isleaf val.
+        # println("EXPAND")
         r = expand!(node, s)
         atomic_xchg!(node.isready, true)
         backpropagate!(r, node)
@@ -47,6 +54,9 @@ function expand!(node::TreeNode, s::Board)
     base = f(alphazero_rep(s)) # ask neural net for policy and value
     p = Array(policy(base))
     v = Array(value(base))
+    if v[1,1] > 1
+        println("V > 1")
+    end
     a, vp = validpolicy(s, p, encoder)
 
     a = map(a) do x
@@ -73,12 +83,18 @@ function backpropagate!(r::Float32, node::TreeNode)
 end
 
 
-function argmaxUCT(W::Vector{Float32}, N::Vector{Float32}, P::Vector{Float32}, c=2.0)
+function argmaxUCT(W::Vector{Float32}, N::Vector{Float32}, P::Vector{Float32}, c=200.0)
     Q = [N==0.0 ? 0.0 : W/N for (W, N) in zip(W, N)]
-    U = c * P ./ (1 .+ N) * √sum(N)
-    return argmax(Q .+ U)
+    U = c * 1 ./ (1 .+ N) * √sum(N)
+    return argmax(our_softmax.(Q .+ U, 0.99))
 end
 
+function our_softmax(val, bound)
+    if val > bound
+        val = bound + (val - bound)/10000000
+    end
+    return val
+end
 
 function validpolicy(s::Board, p::Array, encoder::Dict)
     a = moves(s) # list of valid moves, according to chess rules
@@ -108,25 +124,25 @@ function playgame(s=startboard())
     history = [] # state, π, z
 
     # Break when game is over
-    while(true)
-        pprint(s, unicode=true, color=true)
-        print_tree(tree)
+    # while(false)
         if isdraw(s)
-            z = 0
-            break
+            z = Float32(0)
+            # break
         elseif ischeckmate(s)
-            z = -1
-            break
+            z = Float32(-1)
+            # break
         end
 
         # simulate what moves are best
-        simulate(tree, s, 20)
+        simulate(tree, s, 500)
 
         # choose move from weighted probability distribution
         _, N, _ = children_stats(tree)
         idx = 1:length(N)
         weights = N / sum(N) # =[0.1, 0.1, 0.2, 0.2, 0.1, 0.3]
         idx = sample(idx, ProbabilityWeights(weights))
+
+        print_chess_tree(tree, 0)
 
         # prune the tree (tree = tree's selected child)
         tree = tree.children[idx]
@@ -138,17 +154,18 @@ function playgame(s=startboard())
         s = domove(s, tree.A)
         s = flip(flop(s))
 
-    end
+        pprint(s, unicode=true, color=true)
+    # end
 
-    for i in length(history):1:-1
-        append!(history[i], z)
-        z = -z
-    end
+    # for i in length(history):1:-1
+    #     append!(history[i], z)
+    #     z = -z
+    # end
 
-    return history
+    # return history
 end
 
-playgame(fromfen("R2R1rk1/5p1p/4nQpP/4p2q/3pP3/r1pP3P/2B2PP1/6K1 w - - 0 1"))
+playgame(fromfen("7k/4KRpp/4PP2/8/8/8/8/8 w - - 0 1"))
 
 # function train(ntrain::Int)
 #     examples = []

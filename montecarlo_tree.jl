@@ -66,16 +66,37 @@ function children_stats(node::TreeNode)
     return W, N, P
 end
 
+function print_chess_tree(node::TreeNode, depth)
+    print_chess_node(node, depth)
+    if !(node.children === nothing)
+        for child in node.children
+            print_chess_tree(child, depth+1)
+        end
+    end
+end
+
+function print_chess_node(node::TreeNode, depth)
+    if atomic_cas!(node.isleaf, true, true)
+        return
+    end
+    for i in 0:depth
+        print("  ")
+    end
+    N = atomic_cas!(node.N, Float32(0.0), Float32(0.0))
+    W = atomic_cas!(node.W, Float32(0.0), Float32(0.0))
+    println("Depth: ", depth, "   A: ", node.A, "    N: ", N, "    W: ", W)
+end
 
 # NOT THREAD SAFE, MEANT FOR PRETTY PRINTING RESULTS ONCE DONE
 function AbstractTrees.children(node::TreeNode)
     if node.children != nothing
-        return [child for child in node.children if child.N > 0.1]
+        return node.children
+        # return [child for child in node.children if child.isleaf == false]
     else
         return ()
     end
 end
     
 AbstractTrees.printnode(io::IO, node::TreeNode) = (
-    print(io, node.A, "N: ", node.N)
+    print(io, node.A, "N: ", node.N, node.Q)
 )
