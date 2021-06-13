@@ -32,7 +32,7 @@ end
 
 const encoder, decoder = generate_encoder_decoder()
 
-function encode(a, side::PieceColor)
+function encode(a::MoveList, side::PieceColor)
     encoded_a = map(a) do x
         delta = to(x) - from(x)
         src = from(x)
@@ -56,7 +56,7 @@ function encode(a, side::PieceColor)
     return encoded_a
 end
 
-function valid_policy(s, p)
+function valid_policy(s::Board, p::Array{Float32})
     a = moves(s)
     encoded_a = encode(a, sidetomove(s))
 
@@ -65,7 +65,7 @@ function valid_policy(s, p)
     return a, vp
 end
 
-function get_layers(b, side) 
+function get_layers(b::Board, side::PieceColor)::Array{Float32} 
     side_pieces = nothing
     if side == WHITE
         side_pieces = [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR, PIECE_WQ, PIECE_WK]
@@ -82,20 +82,24 @@ function get_layers(b, side)
 end
 
 # util function to rotate each 8x8 layer in layers
-rotate_layers(layers) = mapslices(rot180, layers, dims=[1, 2]) 
+rot180(layers::Array{Float32, 3}) = mapslices(Base.rot180, layers, dims=[1, 2]) 
 
 function alphazero_rep(b::Board)
      # TODO: apply the rotate board function below
      # TODO: should we always have black on top of white? or current player on bottom?
-    layers = cat(
-        get_layers(b, WHITE),
-        rotate_layers(get_layers(b, BLACK)),
-        sidetomove(b) == WHITE ? ones(8, 8) : zeros(8, 8), 
-        dims=3
-    )
+    layers = nothing
+    if sidetomove(b) == WHITE
+        layers = cat(
+            get_layers(b, WHITE),
+            get_layers(b, BLACK),
+            ones(8, 8), 
+            dims=3)
+    else 
+        layers = cat(
+            rot180(get_layers(b, BLACK)),
+            rot180(get_layers(b, WHITE)),
+            zeros(8, 8), 
+            dims=3) 
+    end
     return convert(Array{Float32}, layers) # cast to float32 for faster ML
 end
-
-# black's pawn layer, it should have the pawns towards
-# the bottom of the screen if rotate works as intended
-# alphazero_rep(startboard())[:, :, 9]

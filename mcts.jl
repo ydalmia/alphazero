@@ -6,7 +6,7 @@ include("translation.jl") # translate AlphaZero <-> Universal Chess Interface
 include("montecarlo_tree.jl") # a tree structure for storing monte carlo searc results
 include("neuralnet.jl") # the brain that helps monte carlo focus its search
 
-function simulate(root, s, nsims)
+function simulate(root::TreeNode, s::Board, nsims::Int64)
     for _ in 1:nsims
         mcts(deepcopy(s), root) # deep copy bc making moves modifies board (s)
     end
