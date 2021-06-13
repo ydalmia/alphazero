@@ -1,96 +1,102 @@
 using Chess
 
-function alphazero_rep(board::Board)
-    board_rep = Array{Float32}(undef, 8, 8, 12, 1)
+ENCODING_TYPE = Tuple{SquareDelta, Union{PieceType, Nothing}}
+function generate_encoder_decoder()
+    move_list = Vector{ENCODING_TYPE}()
+    encoder = Dict{ENCODING_TYPE, Int64}()
+    decoder = Dict{Int64, ENCODING_TYPE}()
 
-    board_pieces = [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR,
-                    PIECE_WQ, PIECE_WK, PIECE_BP, PIECE_BN,
-                    PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
-
-    for (i, piece) in enumerate(board_pieces)
-        board_rep[:, :, i, 1] = toarray(pieces(board, piece))
-    end
-
-    return board_rep
-end
-
-function alphazero_rep(move::Move, encoder::Dict)
-    dest = to(move)
-    src = from(move)
-
-    src_row = rank(src).val
-    src_col = file(src).val
-
-    delta = dest - src
-    prmt = EMPTY
-
-    if ispromotion(move)
-        prmt = promotion(move)
-        if prmt == QUEEN
-            prmt = EMPTY
-        end
-    end
-
-    plane = encoder[delta, prmt]
-
-    return (src_row, src_col, plane)
-end
-
-function uci_rep(src_row::Int, src_col::Int, plane::Int, decoder::Dict)
-    sq = Square(SquareFile(src_col), SquareRank(src_row))
-
-    delta, prmt = decoder[plane]
-
-    if prmt == EMPTY
-        return Move(sq, sq + delta)
-    end
-
-    return Move(sq, sq + delta, prmt)
-end
-
-function alphazero_encoder_decoder()
-    encoder = Dict()
-    decoder = Dict()
-
-    i = 1
-
-    # queen moves (56)
+    # queen moves
     for n in 1:7
         for delta in [DELTA_N, DELTA_S, DELTA_E, DELTA_W, DELTA_NW, DELTA_NE, DELTA_SW, DELTA_SE]
-            encoder[(n * delta, EMPTY)] = i
-            decoder[i] = (n * delta, EMPTY)
-            i += 1
+            push!(move_list, (n * delta, nothing))
         end
     end
-
-    # knight moves (4)
+    # knight moves
     for delta_file in [2 * DELTA_E, 2 * DELTA_W]
         for delta_rank in [DELTA_N, DELTA_S]
-            delta = delta_file + delta_rank
-            encoder[(delta, EMPTY)] = i
-            decoder[i] = (delta, EMPTY)
-            i += 1
+            push!(move_list, (delta_file + delta_rank, nothing))
         end
     end
-
     # more knight moves (4)
     for delta_file in [DELTA_E, DELTA_W]
         for delta_rank in [2 * DELTA_N, 2 * DELTA_S]
-            delta = delta_file + delta_rank
-            encoder[(delta, EMPTY)] = i
-            decoder[i] = (delta, EMPTY)
-            i += 1
+            push!(move_list, (delta_file + delta_rank, nothing))
         end
     end
-
     # promotion moves (12)
     for delta in [DELTA_N, DELTA_NE, DELTA_NW]
-        for piece in [KNIGHT, BISHOP, ROOK, QUEEN]
-            encoder[(delta, piece)] = i
-            decoder[i] = (delta, piece)
-            i += 1
+        for piece in [KNIGHT, BISHOP, ROOK]
+            push!(move_list, (delta, piece))
         end
+    end
+    # encoder, decoder
+    for (i, mv) in enumerate(move_list)
+        encoder[mv] = i
+        decoder[i] = mv
     end
 
     return encoder, decoder
 end
+const encoder, decoder = generate_encoder_decoder()
+
+function encode(a, side::PieceColor)
+    encoded_a = map(a) do x
+        delta = to(x) - from(x)
+        src = from(x)
+
+        if side == BLACK 
+            src = Square(65 - src.val)
+            delta = -1*delta
+        end
+
+        # only explicitly encode non-queen promotions
+        prmt = nothing
+        if ispromotion(x) && promotion(x) != QUEEN
+            prmt = promotion(x)
+        end
+
+        mv = (delta, prmt)::ENCODING_TYPE
+        return src, mv
+    end
+    return encoded_a
+end
+
+function valid_policy(s, p)
+    a = moves(s)
+    encoded_a = encode(a, sidetomove(s))
+
+    p = reshape(p, 64, 73)
+    vp = [p[src.val, encoder[mv]] for (src, mv) in encoded_a]
+    return a, vp
+end
+
+function get_layers(b, side) 
+    side_pieces = nothing
+    if side == WHITE
+        side_pieces = [PIECE_WP, PIECE_WN, PIECE_WB, PIECE_WR, PIECE_WQ, PIECE_WK]
+    else 
+        side_pieces = [PIECE_BP, PIECE_BN, PIECE_BB, PIECE_BR, PIECE_BQ, PIECE_BK]
+    end
+
+    piece_layers = [toarray(pieces(b, piece)) for piece in side_pieces]
+    king_castle = cancastlekingside(b, side) ? ones(8, 8) : zeros(8, 8)
+    queen_castle = cancastlequeenside(b, side) ? ones(8, 8) : zeros(8, 8)
+
+    layers = cat(king_castle, queen_castle, piece_layers..., dims=3)
+    return layers
+end
+
+function alphazero_rep(b::Board)
+    layers = cat(
+        get_layers(b, WHITE),
+        mapslices(rot180, get_layers(b, BLACK), dims=[1,2]),
+        sidetomove(b) == WHITE ? ones(8, 8) : zeros(8, 8), 
+        dims=3
+    )
+    return convert(Array{Float32}, layers)
+end
+
+# black's pawn layer, it should have the pawns towards
+# the bottom of the screen
+# alphazero_rep(startboard())[:, :, 9]

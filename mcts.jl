@@ -8,11 +8,9 @@ include("translation.jl") # translate AlphaZero <-> Universal Chess Interface
 include("montecarlo_tree.jl") # a tree structure for storing monte carlo searc results
 include("neuralnet.jl") # the brain that helps monte carlo focus its search
 
-const encoder, _ = alphazero_encoder_decoder()
-
 function simulate(root, s, nsims)
     for _ in 1:nsims
-        mcts(deepcopy(s), root)
+        mcts(deepcopy(s), root) # deep copy bc making moves modifies board (s)
     end
 end
 
@@ -34,22 +32,16 @@ function mcts(s::Board, node::TreeNode)
 end
 
 function expand!(node::TreeNode, s::Board)
-    base = f(alphazero_rep(s)) # ask neural net for policy and value
-    p = Array(policy(base))
-    v = Array(value(base))
-    a, vp = validpolicy(s, p, encoder)
+    x = alphazero_rep(s) # convert board to features
+    x = reshape(x, (size(x)..., 1)) # 1-element in batch, batch dim is last in flux
 
-    a = map(a) do x
-        if !ispromotion(x) && ptype(pieceon(s, from(x))) == PAWN && rank(from(x)) == SS_RANK_7 
-            # actually a queen promotion
-            return Move(from(x), to(x), QUEEN)
-        else
-            return x
-        end
-    end
+    base = f(x) # ask neural net for policy and value
+    p = policy(base)
+    v = value(base)
+    a, vp = valid_policy(s, p)
 
     node.children = [TreeNode(a, vp, node) for (a, vp) in zip(a, vp)]
-    return v[1, 1] # heuristic r
+    return v[1, 1] # nnet r
 end
 
 function backpropagate!(r::Float32, node::TreeNode)
@@ -66,20 +58,4 @@ function argmaxUCT(W::Vector{Float32}, N::Vector{Float32}, P::Vector{Float32}, c
     U = c * P ./ (1 .+ N) * √sum(N)
     UCT = Q .+ U
     return argmax(UCT)
-end
-
-function validpolicy(s::Board, p::Array, encoder::Dict)
-    a = moves(s) # list of valid moves, according to chess rules
-
-    p = reshape(p, (8, 8, 88)) # neural net spits p out as a 1-d vector
-    nmoves = length(a)
-
-    vp = Vector{Float32}(undef, nmoves)
-    for i in 1:nmoves
-        row, col, plane = alphazero_rep(a[i], encoder) # translate uci to az encoding
-        vp[i] = p[row, col, plane] # extract the policy values from nnet output
-    end
-
-    vp = vp ./ sum(vp) # normalize the valid policy
-    return a, vp
 end

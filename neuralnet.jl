@@ -11,7 +11,7 @@ function Residual()
 end
 
 f = Chain(
-    Conv((3, 3), 12 => 256, relu, pad=(1, 1), stride=(1, 1)),
+    Conv((3, 3), 17 => 256, relu, pad=(1, 1), stride=(1, 1)),
     BatchNorm(256, relu),
     Conv((3, 3), 256 => 256, relu, pad=(1, 1), stride=(1, 1)),
     BatchNorm(256),
@@ -27,7 +27,7 @@ policy = Chain(
     Conv((1, 1), 256 => 2, relu, stride=(1, 1)),
     BatchNorm(2, relu),
     flatten,
-    Dense(8*8*2, 8*8*88, sigmoid)
+    Dense(8*8*2, 8*8*73, sigmoid)
 )
 
 
