@@ -9,7 +9,7 @@ using Distributed
 # @everywhere 
 include("mcts.jl")
 
-function playgames(s, ngames=5; nsims=1000)
+function playgames(s, ngames=1; nsims=1000)
     # @distributed 
     for _ in 1:ngames
         root = TreeNode()

@@ -1,8 +1,6 @@
 # RUN SETTINGS: julia --threads 8
 # may also want: --optimize=3 --math-mode=fast --inline=yes --check-bounds=no
 using Chess: isdraw, ischeckmate, Board, domove!, tostring, pprint
-using Flux
-using StatsBase
 
 include("translation.jl") # translate AlphaZero <-> Universal Chess Interface
 include("montecarlo_tree.jl") # a tree structure for storing monte carlo searc results
@@ -33,15 +31,15 @@ end
 
 function expand!(node::TreeNode, s::Board)
     x = alphazero_rep(s) # convert board to features
-    x = reshape(x, (size(x)..., 1)) # 1-element in batch, batch dim is last in flux
+    x = reshape(x, (size(x)..., 1)) # batch size 1, batch dim comes last in flux
 
     base = f(x) # ask neural net for policy and value
-    p = policy(base)
-    v = value(base)
+    p = policy(base)[:, 1] # p is a dense output, and has batch size 1
+    v = value(base)[1, 1] # v is a single scalar value, and has batch size 1
     a, vp = valid_policy(s, p)
 
     node.children = [TreeNode(a, vp, node) for (a, vp) in zip(a, vp)]
-    return v[1, 1] # nnet r
+    return v
 end
 
 function backpropagate!(r::Float32, node::TreeNode)

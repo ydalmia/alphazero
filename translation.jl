@@ -46,11 +46,13 @@ function encode(a, side::PieceColor)
         src = from(x)
 
         if side == BLACK 
-            src = Square(65 - src.val)
-            delta = -1*delta
+            src = Square(65 - src.val) # rotate 180 degrees
+            delta = -1 * delta # opposite vector in mathematical sense
         end
 
-        # only explicitly encode non-queen promotions
+        # elide queen promotions and pawns moving into the final rank of the board
+        # so that we only explicitly encode under promotions. ie, a queen promotion
+        # will have prmt = nothing
         prmt = nothing
         if ispromotion(x) && promotion(x) != QUEEN
             prmt = promotion(x)
@@ -87,16 +89,22 @@ function get_layers(b, side)
     return layers
 end
 
+# util function to rotate each 8x8 layer in layers
+rotate_layers(layers) = mapslices(rot180, layers, dims=[1, 2]) 
+
 function alphazero_rep(b::Board)
+     # TODO: apply the rotate board function below
+     # TODO: should we always have black on top of white? or current player on bottom?
     layers = cat(
         get_layers(b, WHITE),
-        mapslices(rot180, get_layers(b, BLACK), dims=[1,2]),
+        rotate_layers(get_layers(b, BLACK)),
         sidetomove(b) == WHITE ? ones(8, 8) : zeros(8, 8), 
         dims=3
     )
-    return convert(Array{Float32}, layers)
+    return convert(Array{Float32}, layers) # cast to float32 for faster ML
 end
 
+
 # black's pawn layer, it should have the pawns towards
-# the bottom of the screen
+# the bottom of the screen if rotate works as intended
 # alphazero_rep(startboard())[:, :, 9]
